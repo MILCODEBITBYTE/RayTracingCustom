@@ -67,6 +67,8 @@ public class RayTracingMaster : MonoBehaviour
         RayTracingShader.SetMatrix("_CameraToWorld", _camera.cameraToWorldMatrix);
         RayTracingShader.SetMatrix("_CameraInverseProjection", _camera.projectionMatrix.inverse);
 
+        RayTracingShader.SetFloat("_GroundPlaneY", 0.0f);
+
     }
 
     private void Awake()
