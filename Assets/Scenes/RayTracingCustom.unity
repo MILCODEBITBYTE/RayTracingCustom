@@ -251,6 +251,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   RayTracingShader: {fileID: 7200000, guid: 47b94623a0dda544393fdfc617df4334, type: 3}
   SkyboxTexture: {fileID: 2800000, guid: 8f6f9e9ed35daa44b99e0d9785a85a41, type: 3}
+  DirectionalLight: {fileID: 1360547659}
+  _globalIllumination: 1
+  _reflections: 0
+  _sphereSeed: 111
+  _sphereRadius: {x: 3, y: 8}
+  _spheresMax: 146
+  _spherePlacementRadius: 100
 --- !u!81 &1715420316
 AudioListener:
   m_ObjectHideFlags: 0

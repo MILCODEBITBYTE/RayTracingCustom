@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 [RequireComponent(typeof(Camera))]
@@ -25,14 +26,34 @@ public class RayTracingMaster : MonoBehaviour
     private RenderTexture _target;
     private RenderTexture _converged;
     private Camera _camera;
+    private float _lastFieldOfView;
     private uint _currentSample = 0;
     private Material _addMaterial;
     private ComputeBuffer _sphereBuffer;
+    private List<Transform> _transformsToWatch = new List<Transform>();
+    private static bool _meshObjectsNeedRebuilding = false;
+    private static List<RayTracingObject> _rayTracingObjects = new List<RayTracingObject>();
+    private static List<MeshObject> _meshObjects = new List<MeshObject>();
+    private static List<Vector3> _vertices = new List<Vector3>();
+    private static List<int> _indices = new List<int>();
+    private ComputeBuffer _meshObjectBuffer;
+    private ComputeBuffer _vertexBuffer;
+    private ComputeBuffer _indexBuffer;
+
+    struct MeshObject
+    {
+        public Matrix4x4 localToWorldMatrix;
+        public int indices_offset;
+        public int indices_count;
+    }
+
 
 
     //자동 콜 : 카메라 렌더링이 끝날때 마다.
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
+        RebuildMeshObjectBuffers();
+
         SetShaderParameters();
 
         Render(destination);
@@ -49,6 +70,106 @@ public class RayTracingMaster : MonoBehaviour
         if (_sphereBuffer != null)
         {
             _sphereBuffer.Release();
+        }
+
+        if(_meshObjectBuffer != null)
+        {
+            _meshObjectBuffer.Release();
+        }
+
+        if(_vertexBuffer != null)
+        {
+            _vertexBuffer.Release();
+        }
+
+        if(_indexBuffer != null)
+        {
+            _indexBuffer.Release();
+        }
+    }
+
+    public static void RegisterObject(RayTracingObject obj)
+    {
+        _rayTracingObjects.Add(obj);
+        _meshObjectsNeedRebuilding = true;
+    }
+
+    public static void UnregisterObject(RayTracingObject obj)
+    {
+        _rayTracingObjects.Remove(obj);
+        _meshObjectsNeedRebuilding = true;
+    }
+
+    private void RebuildMeshObjectBuffers()
+    {
+        if(!_meshObjectsNeedRebuilding)
+        {
+            return;
+        }
+
+        _meshObjectsNeedRebuilding = false;
+        _currentSample = 0;
+
+        _meshObjects.Clear();
+        _vertices.Clear();
+        _indices.Clear();
+
+        foreach(RayTracingObject obj in _rayTracingObjects)
+        {
+            Mesh mesh = obj.GetComponent<MeshFilter>().sharedMesh;
+
+            //Add vertex data
+            int firstVertex = _vertices.Count;
+            _vertices.AddRange(mesh.vertices);
+
+            //Add index data - if the vertex buffer wasn't empty before, the indices need to be offset
+            int firstIndex = _indices.Count;
+            var indices = mesh.GetIndices(0);
+            _indices.AddRange(indices.Select(indexer => indexer + firstVertex));
+
+            //Add the object itself
+            _meshObjects.Add(new MeshObject()
+            {
+                localToWorldMatrix = obj.transform.localToWorldMatrix,
+                indices_offset = firstIndex,
+                indices_count = indices.Length
+            });
+        }
+
+        int strideSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(MeshObject));
+        CreateComputeBuffer(ref _meshObjectBuffer, _meshObjects, strideSize);
+        CreateComputeBuffer(ref _vertexBuffer, _vertices, 12);
+        CreateComputeBuffer(ref _indexBuffer, _indices, 4);
+    }
+
+    private static void CreateComputeBuffer<T>(ref ComputeBuffer buffer, List<T> data, int stride)
+        where T : struct
+    {
+        if(buffer != null)
+        {
+            if(data.Count == 0 || buffer.count != data.Count || buffer.stride != stride)
+            {
+                buffer.Release();
+                buffer = null;
+            }
+        }
+
+        if(data.Count != 0)
+        {
+            if(buffer == null)
+            {
+                buffer = new ComputeBuffer(data.Count, stride);
+            }
+
+            buffer.SetData(data);
+        }
+    }
+
+    private void SetComputeBuffer(string name, ComputeBuffer buffer)
+    {
+        if(buffer != null)
+        {
+            RayTracingShader.SetBuffer(0, name, buffer);
         }
     }
 
@@ -83,24 +204,8 @@ public class RayTracingMaster : MonoBehaviour
 
     private void InitRenderTexture()
     {
-        if (_converged == null || _converged.height != Screen.height || _converged.width != Screen.width)
-        {
-            _currentSample = 0;
-
-            if (_converged != null)
-            {
-                _converged.Release();
-            }
-
-            _converged = new RenderTexture(Screen.width, Screen.height, 0,
-                RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
-            _converged.enableRandomWrite = true;
-            _converged.Create();
-        }
-
         if (_target == null || _target.width != Screen.width || _target.height != Screen.height)
         {
-            _currentSample = 0;
             //이미 할당된 텍스처가 있으면 비우기
             if (_target != null)
                 _target.Release();
@@ -110,6 +215,14 @@ public class RayTracingMaster : MonoBehaviour
                 RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
             _target.enableRandomWrite = true;
             _target.Create();
+
+            _converged = new RenderTexture(Screen.width, Screen.height, 0,
+    RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            _converged.enableRandomWrite = true;
+            _converged.Create();
+
+            // Reset sampling
+            _currentSample = 0;
         }
     }
 
@@ -133,20 +246,27 @@ public class RayTracingMaster : MonoBehaviour
         Vector3 l = DirectionalLight.transform.forward;
         RayTracingShader.SetVector("_DirectionalLight", new Vector4(l.x, l.y, l.z, DirectionalLight.intensity));
 
-        //Spheres
-        RayTracingShader.SetBuffer(0, "_Spheres", _sphereBuffer);
-
         //Randomness seed
         RayTracingShader.SetFloat("_Seed", Random.value);
 
         //GlobalIllumination
         RayTracingShader.SetFloat("_GlobalIllumination", _globalIllumination);
+
+
+        SetComputeBuffer("_Spheres", _sphereBuffer);
+        SetComputeBuffer("_MeshObjects", _meshObjectBuffer);
+        SetComputeBuffer("_Vertices", _vertexBuffer);
+        SetComputeBuffer("_Indices", _indexBuffer);
+
     }
 
     private void Awake()
     {
         _camera = GetComponent<Camera>();
         _reflections = 8;
+
+        _transformsToWatch.Add(transform);
+        _transformsToWatch.Add(DirectionalLight.transform);
     }
 
     private void OnValidate()
@@ -158,17 +278,22 @@ public class RayTracingMaster : MonoBehaviour
     private void Update()
     {
         //Reset _currentSample count if camera has moved
-        if (transform.hasChanged)
+
+        if(_camera.fieldOfView != _lastFieldOfView)
         {
             _currentSample = 0;
-            transform.hasChanged = false;
+            _lastFieldOfView = _camera.fieldOfView;
         }
 
-        if (DirectionalLight.transform.hasChanged)
+        foreach(Transform t in _transformsToWatch)
         {
-            _currentSample = 0;
-            DirectionalLight.transform.hasChanged = false;
+            if(t.hasChanged)
+            {
+                t.hasChanged = false;
+                _currentSample = 0;
+            }
         }
+
     }
 
     void Start()
@@ -230,7 +355,10 @@ public class RayTracingMaster : MonoBehaviour
         {
             _sphereBuffer.Release();
         }
-        _sphereBuffer = new ComputeBuffer(spheres.Count, strideSize);
-        _sphereBuffer.SetData(spheres);
+        if(spheres.Count > 0)
+        {
+            _sphereBuffer = new ComputeBuffer(spheres.Count, strideSize);
+            _sphereBuffer.SetData(spheres);
+        }
     }
 }
