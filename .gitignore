@@ -3,3 +3,9 @@
 ################################################################################
 
 /Library
+/Logs
+/obj/Debug
+/Packages
+/UserSettings
+/Temp
+/.vs/RayTracingCustom/v16
