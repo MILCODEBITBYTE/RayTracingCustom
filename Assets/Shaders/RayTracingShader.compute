@@ -17,6 +17,8 @@ float2 _PixelOffset;
 
 int _Reflections;
 
+float3 _DirectionalLight;
+
 struct Ray
 {
     float3 origin;
@@ -125,20 +127,34 @@ float3 shade(inout Ray ray, RayHit hit)
     //충돌 찾았으면
     if (hit.distance < 1.#INF)
     {
-        float3 specular = float3(0.6f, 0.6f, 0.6f);
+        float3 specular = float3(0.04f, 0.04f, 0.04f);
+        float3 albedo = float3(0.8f, 0.8f, 0.8f);
         
         //specular 반사에 따른 감쇠
+        float epsilon = 0.001f;
         ray.origin = hit.position + hit.normal * 0.001f;
         ray.direction = reflect(ray.direction, hit.normal);
         ray.energy *= specular;
         
-        return float3(0.0f, 0.0f, 0.0f);
+        //그림자 테스트
+        bool bShadow = false;
+        Ray shadowRay = CreateRay(hit.position + hit.normal * 0.001f, -1 * _DirectionalLight.xyz);
+        RayHit shadowHit = Trace(shadowRay);
+        
+        if (shadowHit.distance != 1.#INF)
+        {
+            return float3(0.0f, 0.0f, 0.0f);
+
+        }
+        
+        return saturate(dot(hit.normal, _DirectionalLight.xyz) * -1) * _DirectionalLight.b * albedo;
+
     }
     //충돌 없으면 skybox
     else
     {
         ray.energy = 0;
-        float intensity = 1.4f;
+        float intensity = 1.1f;
         
         int lod = 0;
         float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;

@@ -9,6 +9,8 @@ public class RayTracingMaster : MonoBehaviour
     private ComputeShader RayTracingShader;
     [SerializeField]
     private Texture SkyboxTexture;
+    [SerializeField]
+    private Light DirectionalLight;
     
     [SerializeField, Range(1, 9)] private int _reflections;
     
@@ -89,12 +91,21 @@ public class RayTracingMaster : MonoBehaviour
 
         //Number of reflections
         RayTracingShader.SetInt("_Reflections", _reflections);
+
+        //Directional  Light
+        Vector3 l = DirectionalLight.transform.forward;
+        RayTracingShader.SetVector("_DirectionalLight", new Vector4(l.x, l.y, l.z, DirectionalLight.intensity));
     }
 
     private void Awake()
     {
         _camera = GetComponent<Camera>();
         _reflections = 8;
+    }
+
+    private void OnValidate()
+    {
+        _currentSample = 0;
     }
 
     private void Update()
@@ -104,6 +115,12 @@ public class RayTracingMaster : MonoBehaviour
         {
             _currentSample = 0;
             transform.hasChanged = false;
+        }
+
+        if(DirectionalLight.transform.hasChanged)
+        {
+            _currentSample = 0;
+            DirectionalLight.transform.hasChanged = false;
         }
     }
 
