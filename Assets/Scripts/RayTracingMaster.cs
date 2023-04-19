@@ -12,6 +12,8 @@ public class RayTracingMaster : MonoBehaviour
 
     private RenderTexture _target;
     private Camera _camera;
+    private uint _currentSample = 0;
+    private Material _addMaterial;
 
 
     //자동 콜 : 카메라 렌더링이 끝날때 마다.
@@ -37,9 +39,19 @@ public class RayTracingMaster : MonoBehaviour
         //처리
         RayTracingShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
 
+        //progressive smapling by addShader
+        if(_addMaterial == null)
+        {
+            _addMaterial = new Material(Shader.Find("Hidden/AddShader"));
+        }
 
+        _addMaterial.SetFloat("_Sample", _currentSample);
+
+         
         //결과 텍스쳐를 스크린에 그리기
-        Graphics.Blit(_target, destination);
+        Graphics.Blit(_target, destination, _addMaterial);
+
+        _currentSample++;
     }
 
 
@@ -69,6 +81,8 @@ public class RayTracingMaster : MonoBehaviour
 
         RayTracingShader.SetFloat("_GroundPlaneY", 0.0f);
 
+        //progressive sampling
+        RayTracingShader.SetVector("_PixelOffset", new Vector2(Random.value, Random.value));
     }
 
     private void Awake()
@@ -76,9 +90,20 @@ public class RayTracingMaster : MonoBehaviour
         _camera = GetComponent<Camera>();
     }
 
+    private void Update()
+    {
+        //Reset _currentSample count if camera has moved
+        if(transform.hasChanged)
+        {
+            _currentSample = 0;
+            transform.hasChanged = false;
+        }
+    }
+
     void Start()
     {
 
     }
+
 }
 

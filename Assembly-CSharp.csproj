@@ -61,6 +61,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\Shaders\RayTracingShader.compute" />
+    <None Include="Assets\Shaders\addShader.shader" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
