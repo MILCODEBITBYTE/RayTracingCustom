@@ -9,6 +9,9 @@ public class RayTracingMaster : MonoBehaviour
     private ComputeShader RayTracingShader;
     [SerializeField]
     private Texture SkyboxTexture;
+    
+    [SerializeField, Range(1, 9)] private int _reflections;
+    
 
     private RenderTexture _target;
     private Camera _camera;
@@ -83,11 +86,15 @@ public class RayTracingMaster : MonoBehaviour
 
         //progressive sampling
         RayTracingShader.SetVector("_PixelOffset", new Vector2(Random.value, Random.value));
+
+        //Number of reflections
+        RayTracingShader.SetInt("_Reflections", _reflections);
     }
 
     private void Awake()
     {
         _camera = GetComponent<Camera>();
+        _reflections = 8;
     }
 
     private void Update()

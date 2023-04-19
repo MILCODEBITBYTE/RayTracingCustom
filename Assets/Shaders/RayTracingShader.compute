@@ -15,10 +15,13 @@ float _GroundPlanY;
 
 float2 _PixelOffset;
 
+int _Reflections;
+
 struct Ray
 {
     float3 origin;
     float3 direction;
+    float3 energy;
 };
 
 Ray CreateRay(float3 origin, float3 direction)
@@ -26,6 +29,7 @@ Ray CreateRay(float3 origin, float3 direction)
     Ray ray;
     ray.origin = origin;
     ray.direction = direction;
+    ray.energy = float3(1.0f, 1.0f, 1.0f);
     return ray;
 }
 
@@ -108,7 +112,10 @@ RayHit Trace(Ray ray)
 {
     RayHit bestHit = CreateRayHit();
     IntersectGroundPlan(ray, bestHit);
-    IntersectSphere(ray, bestHit, float4(0, 3.0f, 0, 1.0f));
+    IntersectSphere(ray, bestHit, float4(0.0f, 3.0f, 0.0f, 1.0f));
+    IntersectSphere(ray, bestHit, float4(3.0f, 3.0f, 0.0f, 1.0f));
+    IntersectSphere(ray, bestHit, float4(0.0f, 3.0f, 3.0f, 1.0f));
+    IntersectSphere(ray, bestHit, float4(3.0f, 3.0f, 3.0f, 1.0f));
     return bestHit;
 
 }
@@ -118,16 +125,26 @@ float3 shade(inout Ray ray, RayHit hit)
     //충돌 찾았으면
     if (hit.distance < 1.#INF)
     {
-        return hit.normal * 0.5f + 0.5f;
+        float3 specular = float3(0.6f, 0.6f, 0.6f);
+        
+        //specular 반사에 따른 감쇠
+        ray.origin = hit.position + hit.normal * 0.001f;
+        ray.direction = reflect(ray.direction, hit.normal);
+        ray.energy *= specular;
+        
+        return float3(0.0f, 0.0f, 0.0f);
     }
     //충돌 없으면 skybox
     else
     {
+        ray.energy = 0;
+        float intensity = 1.4f;
+        
         int lod = 0;
         float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
         float theta = acos(ray.direction.y) / -PI;
         
-        return _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), lod);
+        return intensity * _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), lod).xyz;
     }
 
 }
@@ -147,8 +164,17 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     Ray ray = CreateCameraRay(uv);
     
     //Trace and shade
-    RayHit hit = Trace(ray);
-    float3 result = shade(ray, hit);
+    float3 result = float3(0, 0, 0);
+    for (int i = 0; i < _Reflections; ++i)
+    {
+        RayHit hit = Trace(ray);
+        result += ray.energy * shade(ray, hit);
+        //0 이면 중지
+        if(!any(ray.energy))
+            break;
+
+    }
+        
         
     Result[id.xy] = float4(result, 1);
 
