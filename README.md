@@ -10,3 +10,12 @@
 모든 소스와 내용은 해당 블로그로 부터 가져온 것 입니다. 
 
 구현 내용중 약간을 변형하여(카메라 추가등) 수정되었습니다.
+
+## TAG 정보
+* v0.1.0 - 설정 및 스카이박스
+* v0.2.0 - 땅과 구
+* v0.3.0 - 안티앨리어싱 : progressive sampling
+* v0.4.0 - 반사와  specular
+* v0.5.0 - DirectionalLight
+* v0.6.0 - Scene and material (랜덤 매터리얼)
+* v0.7.0 -  Mesh 렌더링
